@@ -1,0 +1,10 @@
+{
+  "name": "tiny-canvas-platformer",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc && node scripts/build.mjs",
+    "test": "npm run build && node --test tests/*.test.mjs"
+  },
+  "devDependencies": { "typescript": "^5.9.3" }
+}
