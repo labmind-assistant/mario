@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# umb secrets gate. Installed by umb-init.
+# Blocks at the git layer so it holds even when an agent is driving.
+set -euo pipefail
+
+root="$(git rev-parse --show-toplevel)"
+scan="$root/.agents/umb/scripts/gitleaks-staged.sh"
+
+if [ ! -x "$scan" ]; then
+  echo "umb: $scan missing or not executable — run umb-doctor." >&2
+  exit 1
+fi
+
+exec "$scan"
