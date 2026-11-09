@@ -6,7 +6,7 @@ import vm from 'node:vm';
 function game() {
   const context = vm.createContext({
     document: { getElementById: () => ({ width: 800, height: 480, getContext: () => ({}) }) },
-    window: { addEventListener() {} },
+    window: { addEventListener(name, handler) { this[name] = handler; } },
     requestAnimationFrame() {},
   });
   vm.runInContext(readFileSync('docs/game.js', 'utf8'), context);
@@ -32,7 +32,7 @@ test('coins, flag, fall and restart', () => {
   assert.equal(run('state'), 'won');
   run('restart(); player.y=600; update(0)');
   assert.equal(run('state'), 'lost');
-  run('restart()');
+  run("window.keydown({ code: 'KeyR', repeat: false })");
   assert.equal(run('state'), 'playing');
   assert.equal(run('score'), 0);
   assert.equal(run('coins.every(c => !c.taken)'), true);
@@ -66,4 +66,54 @@ test('the whole level can be traversed with three gap jumps', () => {
   `);
   assert.equal(run('state'), 'won');
   assert.ok(run('score > 0'));
+});
+
+test('one enemy patrols within its platform and reverses at both edges', () => {
+  const run = game();
+  const start = run('enemy.x');
+  run('update(1/120)');
+  assert.ok(run('enemy.x > ' + start));
+  run('enemy.x=enemyPlatform.x+enemyPlatform.w-enemy.w; enemy.vx=70; update(1/120)');
+  assert.ok(run('enemy.vx < 0 && enemy.x + enemy.w <= enemyPlatform.x + enemyPlatform.w'));
+  run('enemy.x=enemyPlatform.x; enemy.vx=-70; update(1/120)');
+  assert.ok(run('enemy.vx > 0 && enemy.x >= enemyPlatform.x'));
+});
+
+test('descending stomp removes enemy, awards 100 once, and restart restores it', () => {
+  const run = game();
+  run('enemy.x=enemyPlatform.x+5; player.x=enemy.x; player.y=enemy.y-player.h-1; player.vy=250; update(1/120)');
+  assert.equal(run('enemy.alive'), false);
+  assert.equal(run('score'), 100);
+  assert.equal(run('state'), 'playing');
+  run('update(1/120)');
+  assert.equal(run('score'), 100);
+  run('restart()');
+  assert.equal(run('enemy.alive'), true);
+  assert.equal(run('score'), 0);
+});
+
+for (const contact of ['side', 'below']) test(`enemy ${contact} contact loses`, () => {
+  const run = game();
+  run(contact === 'side'
+    ? 'player.x=enemy.x-player.w+2; player.y=enemy.y; update(0)'
+    : 'player.x=enemy.x; player.y=enemy.y+enemy.h-2; player.vy=-100; update(0)');
+  assert.equal(run('state'), 'lost');
+});
+
+test('each floating platform can be landed on using the actual fixed-step physics', () => {
+  for (let index = 4; index < 8; index++) {
+    const run = game();
+    run(`
+      const target = platforms[${index}];
+      player.x=target.x-65; player.y=420-player.h; player.grounded=true;
+      enemy.x=enemyPlatform.x+enemyPlatform.w-enemy.w; enemy.vx=-70;
+      keys.add('ArrowRight'); jumpQueued=true;
+      for (let step=0; step<60; step++) {
+        update(1/120);
+        if (player.grounded && player.y+player.h===target.y) break;
+      }
+    `);
+    assert.equal(run('player.y+player.h'), 320, `platform ${index}`);
+    assert.equal(run('state'), 'playing');
+  }
 });
